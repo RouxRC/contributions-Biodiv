@@ -1,2 +1,4 @@
 .cache
 *.pyc
+data-contributions
+moissonneur-API/node_modules

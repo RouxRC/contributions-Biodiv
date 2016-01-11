@@ -1,0 +1,20 @@
+{
+  "name": "moissonneur-parlement-et-citoyens",
+  "version": "1.0.0",
+  "description": "Harvest https://www.parlement-et-citoyens.fr/.",
+  "main": "fetch-json.js",
+  "scripts": {
+    "fetch-json": "node fetch-json.js"
+  },
+  "keywords": [
+    "harvester",
+    "json"
+  ],
+  "author": "Emmanuel Raviart",
+  "license": "AGPL-3.0+",
+  "dependencies": {
+    "babel": "^5.8.23",
+    "mz": "^2.0.0",
+    "node-fetch": "^1.3.3"
+  },
+}

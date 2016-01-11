@@ -6,11 +6,11 @@ import requests
 
 def buildUrl(url):
     if not url.startswith("http"):
-        url = "http://www.republique-numerique.fr/%s" % url.lstrip("/")
+        url = "https://www.parlement-et-citoyens.fr/%s" % url.lstrip("/")
     return url
 
 def buildCache(url):
-    url = url.replace("http://www.republique-numerique.fr/", "")
+    url = url.replace("https://www.parlement-et-citoyens.fr/", "")
     return url.replace("/", "___")
 
 def download(url):
@@ -133,7 +133,7 @@ def processUser(userId, all_contribs, users, contributions):
 
     users[userId] = user
 
-def buildContribsFromEtalab(repodir):
+def buildContribsFromAPI(repodir, project=None):
     all_contribs = {}
     for root, _, files in os.walk(repodir):
         for fil in files:
@@ -147,7 +147,7 @@ def buildContribsFromEtalab(repodir):
                 except:
                     data = data['version']
                     cid = "v%s" % data["id"]
-                if not data["votes_total"]:
+                if not data["votes_total"] or project and project not in data["_links"]["show"]:
                     continue
                 cidstr = data["_links"]["show"]
                 cidstr = cidstr[cidstr.find("/opinions/")+10:]
@@ -166,13 +166,17 @@ def format_for_csv(val):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        project = sys.argv[1]
+    else:
+        project = "projet-de-loi-pour-la-reconquete-de-la-biodiversite-de-la-nature-et-des-paysages"
     if not os.path.exists(os.path.join("data-contributions", "")):
         print >> sys.stderr, "ERROR: missing contributions data from Etalab's repository"
         print >> sys.stderr, 'Please pull it first with "git submodule init && git submodule update"'
         exit(1)
-    all_contribs = buildContribsFromEtalab("data-contributions")
+    all_contribs = buildContribsFromAPI("data-contributions", project)
 
-    nextPage, users, contributions = processList("/projects/projet-de-loi-numerique/participants", all_contribs)
+    nextPage, users, contributions = processList("/project/%s/participants" % project, all_contribs)
     while nextPage:
         nextPage, users, contributions = processList(nextPage, all_contribs, users, contributions)
 

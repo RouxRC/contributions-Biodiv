@@ -51,9 +51,7 @@ def build_users_network(users, contributions, filename):
             G.remove_node(u)
     nx.write_gexf(G, filename)
 
-def build_users_contribs_network(users, contributions, filename):
-    pass
-
+# Old code for loading data from dump
 re_clean_link = re.compile(r'^(.).*"(\d+)"')
 def load_full_data(filepointer):
     users = {}
@@ -119,17 +117,11 @@ def load_full_data(filepointer):
     return users, contributions
 
 if __name__ == "__main__":
-    # Run code for old data on python build_networks.py 1
-    if len(sys.argv) > 1:
-        with open(os.path.join("data", "users.json")) as f:
-            users = json.load(f)
-        with open(os.path.join("data", "contributions.json")) as f:
-            contributions = json.load(f)
-        build_contribs_network(users, contributions, os.path.join("data", "contributions.gexf"))
-        build_users_network(users, contributions, os.path.join("data", "users.gexf"))
-    else:
-        with open(os.path.join("data", "2015-11-30_projet-de-loi-numerique_consultation.anon.csv")) as f:
-            users, contributions = load_full_data(f)
-        build_contribs_network(users, contributions, os.path.join("data", "contributions.gexf"))
-        build_users_network(users, contributions, os.path.join("data", "users.gexf"))
+    with open(os.path.join("data", "users.json")) as f:
+        # TODO anon non contributing citizens cf load_full_data
+        users = json.load(f)
+    with open(os.path.join("data", "contributions.json")) as f:
+        contributions = json.load(f)
+    build_contribs_network(users, contributions, os.path.join("data", "contributions.gexf"))
+    build_users_network(users, contributions, os.path.join("data", "users.gexf"))
 
