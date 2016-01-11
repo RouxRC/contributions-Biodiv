@@ -1,34 +1,44 @@
-# Consultation PJLNum
+# Consultation Biodiversité
 
 ## Install:
 
-Pull the contributions metadata from [Etalab's repository](https://git.framasoft.org/etalab/opinions-republique-numerique):
+- Node.js dependencies:
 
 ```bash
-git submodule init
-git submodule update
-# Complete the missing amendement
-cp data/opinion-61_version-190.json data-contributions/opinion-61/version-190.json
+cd moissonneur-API
+npm install
 ```
 
-Install the python dependencies (in your choice of sudo or virtualenv):
+- Python dependencies (in your choice of sudo or virtualenv):
 
 ```bash
 pip install requests networkx
 ```
 
-## Run:
+## Collect and build data:
+
+### Collect parlement-et-citoyens API data:
 
 ```bash
-# Scrap all data from the website
-# takes a few hours, unnecessaray since the scraped data is included in the data directory
-./scrap/scrap.py
+cd moissonneur-API
+node fetch-json.js ../data-contributions
+```
 
-# Build GEXF networks
-./networks/build_networks.py
+### Scrap parlement-et-citoyens users data for this project:
+
+Takes a few hours
+
+```bash
+./scrap.py projet-de-loi-pour-la-reconquete-de-la-biodiversite-de-la-nature-et-des-paysages
+```
+
+### Build GEXF networks:
+
+```bash
+./build_networks.py
 # Build lighter networks by filtering low linkage
 for i in `seq 1 9`; do
   grep -v 'weight="[0-'$i']"' data/contributions.gexf > data/contributions-w$(($i+1))+.gexf
 done
-
 ```
+
