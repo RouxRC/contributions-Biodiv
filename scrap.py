@@ -30,14 +30,14 @@ def download(url):
     return data.decode("utf-8")
 
 re_profiles = re.compile(r'href="/profile/([^"]+)"')
-re_nextpage = re.compile(ur'href="(/projects/projet-de-loi-numerique/participants/\d+)" aria-label="Aller à la page suivante')
+re_nextpage = lambda project: re.compile(ur'href="(/project/%s/participants/\d+)" aria-label="Aller à la page suivante' % project)
 
-def processList(page, all_contribs, users={}, contributions={}):
+def processList(page, all_contribs, users={}, contributions={}, project=None):
     #print page
     content = download(page)
     for u in set(re_profiles.findall(content)):
-        processUser(u, all_contribs, users, contributions)
-    nextp = re_nextpage.search(content)
+        processUser(u, all_contribs, users, contributions, project=project)
+    nextp = re_nextpage(project).search(content)
     return (nextp.group(1) if nextp else None, users, contributions)
 
 re_clean_lines = re.compile(r'[\n\r]+', re.M)
@@ -59,10 +59,10 @@ extra_regexps = [
   ("picture", re.compile(r'<img title[^>]*? src="(/media/cache/default_profile/[^"]+)"[\s/]*>'), lambda x: buildUrl(x.group(1)))
 ]
 
-re_propals = re.compile(r'<li class="opinion has-chart[^"]*" data-ok="(\d+)" data-nok="(\d+)" data-mitige="(\d+)" data-pie-id="(\d+)">.*?<a href="(/projects/projet-de-loi-numerique/consultation/consultation/opinions/((([^/]+)/[^/"]+)[^"]*))">\s*([^<]+)\s*</a>.*?<span>(\d+) vote.*?<span>(\d+) argument.*?<span>(\d+) source')
-re_votes = re.compile(ur'</a> a voté sur <a href="/projects/projet-de-loi-numerique/consultation/consultation/opinions/([^"]+)">([^<]+)</a>.*?<span class="label label-(warning|success|danger)">')
+re_propals = lambda project: re.compile(r'<li class="opinion has-chart[^"]*" data-ok="(\d+)" data-nok="(\d+)" data-mitige="(\d+)" data-pie-id="(\d+)">.*?<a href="(/projects/%s/consultation/consultation/opinions/((([^/]+)/[^/"]+)[^"]*))">\s*([^<]+)\s*</a>.*?<span>(\d+) vote.*?<span>(\d+) argument.*?<span>(\d+) source' % project)
+re_votes = lambda project: re.compile(ur'</a> a voté sur <a href="/projects/%s/consultation/consultation/opinions/([^"]+)">([^<]+)</a>.*?<span class="label label-(warning|success|danger)">' % project)
 
-def processUser(userId, all_contribs, users, contributions):
+def processUser(userId, all_contribs, users, contributions, project=project):
     if userId in users:
         return
 
@@ -92,7 +92,7 @@ def processUser(userId, all_contribs, users, contributions):
         res = reg.search(content)
         user[key] = lmbda(res) if res else None
 
-    for pr in re_propals.findall(content):
+    for pr in re_propals(project).findall(content):
         typ = "v" if "/versions/" in pr[5] else "o"
         prop = {
           "id": "%s%s" % (typ, pr[3]),
@@ -120,7 +120,7 @@ def processUser(userId, all_contribs, users, contributions):
         else:
             user['amendements_total'] += 1
 
-    for v in re_votes.findall(content):
+    for v in re_votes(project).findall(content):
         # Check votes are on existing contributions, not on arguments/sources/comments
         hashcontrib = "%s#%s" % (v[0], v[1])
         if not hashcontrib in all_contribs:
@@ -176,13 +176,13 @@ if __name__ == "__main__":
         exit(1)
     all_contribs = buildContribsFromAPI("data-contributions", project)
 
-    nextPage, users, contributions = processList("/project/%s/participants" % project, all_contribs)
+    nextPage, users, contributions = processList("/project/%s/participants" % project, all_contribs, project=project)
     while nextPage:
-        nextPage, users, contributions = processList(nextPage, all_contribs, users, contributions)
+        nextPage, users, contributions = processList(nextPage, all_contribs, users, contributions, project=project)
 
     print "Total users found:", len(users)
     print "contribs from scrap:", len(contributions)
-    print "contribs from etalab with votes:", len(all_contribs)
+    print "contribs from API with votes:", len(all_contribs)
 
     if not os.path.exists("data"):
         os.makedirs("data")
