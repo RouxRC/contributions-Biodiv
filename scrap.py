@@ -2,7 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import os, sys, re, json
+import random, md5
 import requests
+import warnings
+warnings.filterwarnings("ignore")
 
 def buildUrl(url):
     if not url.startswith("http"):
@@ -30,13 +33,13 @@ def download(url):
     return data.decode("utf-8")
 
 re_profiles = re.compile(r'href="/profile/([^"]+)"')
-re_nextpage = lambda project: re.compile(ur'href="(/project/%s/participants/\d+)" aria-label="Aller à la page suivante' % project)
+re_nextpage = lambda project: re.compile(ur'href="(/projects/%s/participants/\d+)" aria-label="Aller à la page suivante' % project)
 
-def processList(page, all_contribs, users={}, contributions={}, project=None):
+def processList(page, all_contribs, project, users={}, contributions={}):
     #print page
     content = download(page)
     for u in set(re_profiles.findall(content)):
-        processUser(u, all_contribs, users, contributions, project=project)
+        processUser(u, all_contribs, users, contributions, project)
     nextp = re_nextpage(project).search(content)
     return (nextp.group(1) if nextp else None, users, contributions)
 
@@ -62,7 +65,7 @@ extra_regexps = [
 re_propals = lambda project: re.compile(r'<li class="opinion has-chart[^"]*" data-ok="(\d+)" data-nok="(\d+)" data-mitige="(\d+)" data-pie-id="(\d+)">.*?<a href="(/projects/%s/consultation/consultation/opinions/((([^/]+)/[^/"]+)[^"]*))">\s*([^<]+)\s*</a>.*?<span>(\d+) vote.*?<span>(\d+) argument.*?<span>(\d+) source' % project)
 re_votes = lambda project: re.compile(ur'</a> a voté sur <a href="/projects/%s/consultation/consultation/opinions/([^"]+)">([^<]+)</a>.*?<span class="label label-(warning|success|danger)">' % project)
 
-def processUser(userId, all_contribs, users, contributions, project=project):
+def processUser(userId, all_contribs, users, contributions, project):
     if userId in users:
         return
 
@@ -91,6 +94,8 @@ def processUser(userId, all_contribs, users, contributions, project=project):
     for key, reg, lmbda in extra_regexps:
         res = reg.search(content)
         user[key] = lmbda(res) if res else None
+    if not user["type"]:
+        user["type"] = "Citoyen"
 
     for pr in re_propals(project).findall(content):
         typ = "v" if "/versions/" in pr[5] else "o"
@@ -133,7 +138,7 @@ def processUser(userId, all_contribs, users, contributions, project=project):
 
     users[userId] = user
 
-def buildContribsFromAPI(repodir, project=None):
+def buildContribsFromAPI(repodir, project):
     all_contribs = {}
     for root, _, files in os.walk(repodir):
         for fil in files:
@@ -147,13 +152,29 @@ def buildContribsFromAPI(repodir, project=None):
                 except:
                     data = data['version']
                     cid = "v%s" % data["id"]
-                if not data["votes_total"] or project and project not in data["_links"]["show"]:
+                if not data["votes_total"] or project not in data["_links"]["show"]:
                     continue
                 cidstr = data["_links"]["show"]
                 cidstr = cidstr[cidstr.find("/opinions/")+10:]
                 hashcontrib = "%s#%s" % (cidstr, cleaner(data["title"]))
                 all_contribs[hashcontrib] = cid
     return all_contribs
+
+def anonymize_users(users, contributions):
+    salt = str(random.random())
+    anon_users = {}
+    for uid, u in users.items():
+        idmd5 = str(int(md5.new(uid+u['name']+u['description']+salt).hexdigest()[:8], 16))
+        u['id'] = idmd5
+        if u['contributions_total'] or u['type'] != 'Citoyen':
+            for cid, c in contributions.items():
+                if c['author'] == uid:
+                    c['author'] = idmd5
+        else:
+            for key in ['url', 'name', 'geoloc', 'description', 'website', 'twitter', 'facebook']:
+                u[key] = ''
+        anon_users[idmd5] = u
+    return anon_users, contributions
 
 def format_for_csv(val):
     if not val:
@@ -164,25 +185,26 @@ def format_for_csv(val):
         val = '"%s"' % val.replace('"', '""')
     return val.encode('utf-8')
 
-
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         project = sys.argv[1]
     else:
         project = "projet-de-loi-pour-la-reconquete-de-la-biodiversite-de-la-nature-et-des-paysages"
-    if not os.path.exists(os.path.join("data-contributions", "")):
-        print >> sys.stderr, "ERROR: missing contributions data from Etalab's repository"
-        print >> sys.stderr, 'Please pull it first with "git submodule init && git submodule update"'
+    if not os.path.exists("data-contributions"):
+        print >> sys.stderr, "ERROR: missing contributions data repository"
+        print >> sys.stderr, 'Please build it first with "cd moissonneur-API && npm install && node fetch-json.js ../data-contributions"'
         exit(1)
     all_contribs = buildContribsFromAPI("data-contributions", project)
 
-    nextPage, users, contributions = processList("/project/%s/participants" % project, all_contribs, project=project)
+    nextPage, users, contributions = processList("/projects/%s/participants" % project, all_contribs, project)
     while nextPage:
-        nextPage, users, contributions = processList(nextPage, all_contribs, users, contributions, project=project)
+        nextPage, users, contributions = processList(nextPage, all_contribs, project, users, contributions)
 
     print "Total users found:", len(users)
     print "contribs from scrap:", len(contributions)
     print "contribs from API with votes:", len(all_contribs)
+
+    users, contributions = anonymize_users(users, contributions)
 
     if not os.path.exists("data"):
         os.makedirs("data")
