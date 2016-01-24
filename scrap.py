@@ -62,8 +62,8 @@ extra_regexps = [
   ("picture", re.compile(r'<img title[^>]*? src="(/media/cache/default_profile/[^"]+)"[\s/]*>'), lambda x: buildUrl(x.group(1)))
 ]
 
-re_propals = lambda project: re.compile(r'<li class="opinion has-chart[^"]*" data-ok="(\d+)" data-nok="(\d+)" data-mitige="(\d+)" data-pie-id="(\d+)">.*?<a href="(/projects/%s/consultation/consultation/opinions/((([^/]+)/[^/"]+)[^"]*))">\s*([^<]+)\s*</a>.*?<span>(\d+) vote.*?<span>(\d+) argument.*?<span>(\d+) source' % project)
-re_votes = lambda project: re.compile(ur'</a> a voté sur <a href="/projects/%s/consultation/consultation/opinions/([^"]+)">([^<]+)</a>.*?<span class="label label-(warning|success|danger)">' % project)
+re_propals = lambda project: re.compile(r'<li class="opinion has-chart[^"]*" data-ok="(\d+)" data-nok="(\d+)" data-mitige="(\d+)" data-pie-id="(\d+)">.*?<a href="(/projects/%s/consultation/consultation(?:-\d+)?/opinions/((([^/]+)/[^/"]+)[^"]*))">\s*([^<]+)\s*</a>.*?<span>(\d+) vote.*?<span>(\d+) argument.*?<span>(\d+) source' % project)
+re_votes = lambda project: re.compile(ur'</a> a voté sur <a href="/projects/%s/consultation/consultation(?:-\d+)?/opinions/([^"]+)">([^<]+)</a>.*?<span class="label label-(warning|success|danger)">' % project)
 
 def processUser(userId, all_contribs, users, contributions, project):
     if userId in users:
@@ -161,10 +161,10 @@ def buildContribsFromAPI(repodir, project):
     return all_contribs
 
 def anonymize_users(users, contributions):
-    salt = str(random.random())
+    salt = unicode(random.random())
     anon_users = {}
     for uid, u in users.items():
-        idmd5 = str(int(md5.new(uid+u['name']+u['description']+salt).hexdigest()[:8], 16))
+        idmd5 = str(int(md5.new((u"%s%s%s%s" % (uid, u['name'], u['description'], salt)).encode('utf-8')).hexdigest()[:8], 16))
         u['id'] = idmd5
         if u['contributions_total'] or u['type'] != 'Citoyen':
             for cid, c in contributions.items():
