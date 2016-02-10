@@ -36,7 +36,7 @@ re_profiles = re.compile(r'href="/profile/([^"]+)"')
 re_nextpage = lambda project: re.compile(ur'href="(/projects/%s/participants/\d+)" aria-label="Aller à la page suivante' % project)
 
 def processList(page, all_contribs, project, users={}, contributions={}):
-    #print page
+    print page
     content = download(page)
     for u in set(re_profiles.findall(content)):
         processUser(u, all_contribs, users, contributions, project)
@@ -62,8 +62,8 @@ extra_regexps = [
   ("picture", re.compile(r'<img title[^>]*? src="(/media/cache/default_profile/[^"]+)"[\s/]*>'), lambda x: buildUrl(x.group(1)))
 ]
 
-re_propals = lambda project: re.compile(r'<li class="opinion has-chart[^"]*" data-ok="(\d+)" data-nok="(\d+)" data-mitige="(\d+)" data-pie-id="(\d+)">.*?<a href="(/projects/%s/consultation/consultation(?:-\d+)?/opinions/((([^/]+)/[^/"]+)[^"]*))">\s*([^<]+)\s*</a>.*?<span>(\d+) vote.*?<span>(\d+) argument.*?<span>(\d+) source' % project)
-re_votes = lambda project: re.compile(ur'</a> a voté sur <a href="/projects/%s/consultation/consultation(?:-\d+)?/opinions/([^"]+)">([^<]+)</a>.*?<span class="label label-(warning|success|danger)">' % project)
+re_propals = lambda project: re.compile(r'<li class="opinion has-chart[^"]*?" data-ok="(\d+)" data-nok="(\d+)" data-mitige="(\d+)" data-pie-id="(\d+)">.*?<a href="(/projects/%s/consultation/consultation(?:-\d+)?/opinions/((([^/]+)/[^/"]+)[^"]*))">\s*([^<]+)\s*</a>.*?<span>(\d+) vote.*?<span>(\d+) argument.*?<span>(\d+) source' % project)
+re_votes = lambda project: re.compile(ur'</a> a voté sur <a href="/projects/%s/consultation/consultation(?:-\d+)?/opinions/([^"]+)">[^<]+</a>.*?<span class="label label-(warning|success|danger)">' % project)
 
 def processUser(userId, all_contribs, users, contributions, project):
     if userId in users:
@@ -90,21 +90,24 @@ def processUser(userId, all_contribs, users, contributions, project):
 
     for key, reg in meta_regexps.items():
         res = reg.search(content)
-        user[key] = res.group(1).strip() if res else None
+        user[key] = res.group(1).strip() if res else ""
     for key, reg, lmbda in extra_regexps:
         res = reg.search(content)
-        user[key] = lmbda(res) if res else None
+        user[key] = lmbda(res) if res else ""
     if not user["type"]:
         user["type"] = "Citoyen"
 
     for pr in re_propals(project).findall(content):
+        if not pr[5] in all_contribs:
+            print >> sys.stderr, "WARNING: found a mysterious propal", userId, pr[5], pr[8]
+            continue
         typ = "v" if "/versions/" in pr[5] else "o"
         prop = {
-          "id": "%s%s" % (typ, pr[3]),
+          "id": all_contribs[pr[5]],
           "id_str": pr[5],
           "type": "amendement" if typ == "v" else "proposition",
           "section": pr[7],
-          "parent": pr[6] if typ == "v" else None,
+          "parent": pr[6] if typ == "v" else "",
           "author": user["id"],
           "name": pr[8],
           "votes_pro": int(pr[0]),
@@ -127,11 +130,10 @@ def processUser(userId, all_contribs, users, contributions, project):
 
     for v in re_votes(project).findall(content):
         # Check votes are on existing contributions, not on arguments/sources/comments
-        hashcontrib = "%s#%s" % (v[0], v[1])
-        if not hashcontrib in all_contribs:
+        if not v[0] in all_contribs:
             continue
-        vtyp = "pro" if v[2] == "success" else "against" if v[2] == "danger" else "unsure"
-        user['votes_%s' % vtyp].append(all_contribs[hashcontrib])
+        vtyp = "pro" if v[1] == "success" else "against" if v[1] == "danger" else "unsure"
+        user['votes_%s' % vtyp].append(all_contribs[v[0]])
         user['votes_%s_total' % vtyp] += 1
         user['votes_total'] += 1
     #print "-", userId, user['votes_total'], "votes", user['contributions_total'], "propals"
@@ -152,12 +154,11 @@ def buildContribsFromAPI(repodir, project):
                 except:
                     data = data['version']
                     cid = "v%s" % data["id"]
-                if not data["votes_total"] or project not in data["_links"]["show"]:
+                if project not in data["_links"]["show"]:
                     continue
                 cidstr = data["_links"]["show"]
                 cidstr = cidstr[cidstr.find("/opinions/")+10:]
-                hashcontrib = "%s#%s" % (cidstr, cleaner(data["title"]))
-                all_contribs[hashcontrib] = cid
+                all_contribs[cidstr] = cid
     return all_contribs
 
 def anonymize_users(users, contributions):
